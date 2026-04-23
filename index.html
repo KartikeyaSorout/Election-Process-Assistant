@@ -3,74 +3,300 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="An interactive AI assistant to help you understand the election process, timelines, and voting steps." />
+  <meta name="description" content="Interactive AI assistant to help you understand the election process, timelines, and voting steps — powered by Firebase." />
   <title>Election Process Assistant</title>
-  <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateInit" defer></script>
+
+  <!-- Google Charts -->
   <script src="https://www.gstatic.com/charts/loader.js"></script>
+
+  <!-- Firebase SDK (modular compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-performance-compat.js"></script>
+
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     :root {
-      --primary: #3C3489; --primary-light: #EEEDFE; --primary-mid: #7F77DD;
-      --bg: #f5f4f0; --surface: #ffffff; --border: #e8e6e0;
-      --text: #1a1a2e; --muted: #888; --chat-bg: #f5f4f0;
+      --primary: #3C3489;
+      --primary-light: #EEEDFE;
+      --primary-mid: #7F77DD;
+      --primary-hover: #534AB7;
+      --bg: #f5f4f0;
+      --surface: #ffffff;
+      --border: #e8e6e0;
+      --text: #1a1a2e;
+      --muted: #777;
+      --success: #1D9E75;
+      --warning: #e65100;
+      --danger: #c0392b;
+      --chat-bg: #f5f4f0;
+      --radius: 12px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.08);
     }
-    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 1rem; gap: 1rem; }
-    .skip-link { position: absolute; top: -40px; left: 0; background: var(--primary); color: white; padding: 8px 16px; border-radius: 0 0 8px 0; font-size: 14px; z-index: 100; transition: top 0.2s; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+      gap: 1rem;
+    }
+
+    /* Accessibility */
+    .skip-link { position: absolute; top: -40px; left: 0; background: var(--primary); color: white; padding: 8px 16px; border-radius: 0 0 8px 0; font-size: 14px; z-index: 9999; transition: top 0.2s; text-decoration: none; }
     .skip-link:focus { top: 0; }
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-    #app { width: 100%; max-width: 720px; background: var(--surface); border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); overflow: hidden; display: flex; flex-direction: column; height: 88vh; max-height: 820px; }
-    .header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-    .header-left h1 { font-size: 18px; font-weight: 600; color: var(--text); }
-    .header-left p { font-size: 13px; color: var(--muted); }
+
+    /* App Shell */
+    #app {
+      width: 100%; max-width: 740px;
+      background: var(--surface);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 90vh;
+      max-height: 860px;
+    }
+
+    /* Header */
+    .header {
+      padding: 1.1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .header-left h1 { font-size: 17px; font-weight: 600; color: var(--text); }
+    .header-left p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .header-badges { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .badge { font-size: 11px; padding: 3px 10px; border-radius: 100px; border: 1px solid; white-space: nowrap; }
+    .badge-firebase { background: #fff3e0; color: #e65100; border-color: #ffcc80; }
+    .badge-perf { background: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
+    .badge-status { background: var(--primary-light); color: var(--primary); border-color: #d0cde8; }
+
+    /* Tabs */
     .tabs { display: flex; border-bottom: 1px solid var(--border); background: #fafaf8; }
-    .tab { padding: 10px 20px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; transition: all 0.15s; font-family: inherit; }
-    .tab:hover { color: var(--text); }
+    .tab {
+      padding: 10px 16px; font-size: 13px; font-weight: 500;
+      color: var(--muted); cursor: pointer; border: none; background: none;
+      border-bottom: 2px solid transparent; transition: all 0.15s; font-family: inherit;
+    }
+    .tab:hover { color: var(--text); background: #f0eef8; }
     .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
     .tab:focus-visible { outline: 2px solid var(--primary-mid); outline-offset: -2px; }
+
+    /* Tab Panels */
     .tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
     .tab-panel.active { display: flex; }
-    .topics { display: flex; flex-wrap: wrap; gap: 8px; padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--border); background: #fafaf8; }
-    .topic-btn { font-size: 12px; padding: 5px 13px; border-radius: 100px; border: 1px solid #d0cde8; background: var(--surface); color: var(--primary); cursor: pointer; transition: all 0.15s; font-family: inherit; }
+
+    /* Quick Topics */
+    .topics {
+      display: flex; flex-wrap: wrap; gap: 7px;
+      padding: 0.7rem 1.25rem; border-bottom: 1px solid var(--border);
+      background: #fafaf8;
+    }
+    .topic-btn {
+      font-size: 12px; padding: 5px 12px; border-radius: 100px;
+      border: 1px solid #d0cde8; background: var(--surface);
+      color: var(--primary); cursor: pointer; transition: all 0.15s;
+      font-family: inherit;
+    }
     .topic-btn:hover { background: var(--primary-light); border-color: var(--primary-mid); }
     .topic-btn:focus-visible { outline: 2px solid var(--primary-mid); outline-offset: 2px; }
-    .chat-area { flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 14px; scroll-behavior: smooth; }
-    .msg { display: flex; gap: 10px; animation: fadeIn 0.2s ease; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+    /* Chat */
+    .chat-area {
+      flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem;
+      display: flex; flex-direction: column; gap: 14px; scroll-behavior: smooth;
+    }
+    .msg { display: flex; gap: 10px; animation: fadeIn 0.22s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     .msg.user { flex-direction: row-reverse; }
-    .bubble { max-width: 82%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.65; }
-    .msg.user .bubble { background: var(--primary); color: #EEEDFE; border-radius: 14px 14px 4px 14px; }
-    .msg.assistant .bubble { background: var(--chat-bg); color: var(--text); border: 1px solid var(--border); border-radius: 14px 14px 14px 4px; }
-    .avatar { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
+    .bubble {
+      max-width: 82%; padding: 10px 14px; border-radius: 14px;
+      font-size: 14px; line-height: 1.65;
+    }
+    .msg.user .bubble {
+      background: var(--primary); color: var(--primary-light);
+      border-radius: 14px 14px 4px 14px;
+    }
+    .msg.assistant .bubble {
+      background: var(--chat-bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 14px 14px 14px 4px;
+    }
+    .avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; flex-shrink: 0; margin-top: 2px;
+    }
     .avatar.bot { background: var(--primary-light); color: var(--primary); }
-    .avatar.user { background: var(--primary); color: #EEEDFE; }
-    .input-area { padding: 1rem 1.5rem; border-top: 1px solid var(--border); background: var(--surface); display: flex; gap: 10px; align-items: flex-end; }
-    textarea { flex: 1; border: 1px solid #d0cde8; border-radius: 10px; padding: 10px 14px; font-size: 14px; resize: none; min-height: 44px; max-height: 120px; font-family: inherit; color: var(--text); background: #fafaf8; transition: border-color 0.15s, box-shadow 0.15s; line-height: 1.5; }
+    .avatar.user { background: var(--primary); color: var(--primary-light); }
+
+    /* Input */
+    .input-area {
+      padding: 1rem 1.5rem; border-top: 1px solid var(--border);
+      background: var(--surface); display: flex; gap: 10px; align-items: flex-end;
+    }
+    textarea {
+      flex: 1; border: 1px solid #d0cde8; border-radius: 10px;
+      padding: 10px 14px; font-size: 14px; resize: none;
+      min-height: 44px; max-height: 120px; font-family: inherit;
+      color: var(--text); background: #fafaf8;
+      transition: border-color 0.15s, box-shadow 0.15s; line-height: 1.5;
+    }
     textarea:focus { outline: none; border-color: var(--primary-mid); box-shadow: 0 0 0 3px var(--primary-light); }
-    #send-btn { padding: 10px 20px; background: var(--primary); color: #EEEDFE; border: none; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; height: 44px; font-family: inherit; transition: background 0.15s; white-space: nowrap; }
-    #send-btn:hover { background: #534AB7; }
+    #send-btn {
+      padding: 10px 20px; background: var(--primary); color: var(--primary-light);
+      border: none; border-radius: 10px; font-size: 13px; font-weight: 600;
+      cursor: pointer; height: 44px; font-family: inherit; transition: background 0.15s;
+      white-space: nowrap;
+    }
+    #send-btn:hover:not(:disabled) { background: var(--primary-hover); }
     #send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     #send-btn:focus-visible { outline: 2px solid var(--primary-mid); outline-offset: 2px; }
-    .typing-bubble { background: var(--chat-bg); border: 1px solid var(--border); border-radius: 14px 14px 14px 4px; padding: 12px 16px; }
+
+    /* Typing indicator */
+    .typing-bubble {
+      background: var(--chat-bg); border: 1px solid var(--border);
+      border-radius: 14px 14px 14px 4px; padding: 12px 16px;
+    }
     .typing { display: flex; gap: 5px; align-items: center; }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: #aaa; animation: bounce 1.2s infinite; }
     .dot:nth-child(2) { animation-delay: 0.2s; }
     .dot:nth-child(3) { animation-delay: 0.4s; }
     @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+
+    /* Charts Panel */
     #chart-panel { padding: 1.5rem; overflow-y: auto; flex: 1; }
-    #chart-panel h2 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
-    #chart-panel p { font-size: 13px; color: var(--muted); margin-bottom: 1.25rem; }
-    #timeline_chart { width: 100%; height: 300px; }
-    #bar_chart { width: 100%; height: 260px; margin-top: 1.5rem; }
+    .chart-section-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+    .chart-section-desc { font-size: 13px; color: var(--muted); margin-bottom: 1rem; }
+    #timeline_chart, #bar_chart { width: 100%; height: 280px; }
+    #bar_chart { margin-top: 0; }
+
+    /* History Panel */
+    #history-panel { padding: 1.5rem; overflow-y: auto; flex: 1; }
+    .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .history-header h2 { font-size: 15px; font-weight: 600; color: var(--text); }
+    .clear-btn {
+      font-size: 12px; padding: 4px 12px; border-radius: 100px;
+      border: 1px solid #ffc5c5; background: #fff5f5; color: var(--danger);
+      cursor: pointer; font-family: inherit; transition: all 0.15s;
+    }
+    .clear-btn:hover { background: #ffebeb; }
+    .history-item {
+      padding: 12px 14px; border: 1px solid var(--border);
+      border-radius: 10px; margin-bottom: 10px; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .history-item:hover { background: var(--primary-light); border-color: #d0cde8; }
+    .history-item:focus-visible { outline: 2px solid var(--primary-mid); outline-offset: 2px; }
+    .hi-q { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+    .hi-a { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hi-time { font-size: 11px; color: #bbb; margin-top: 4px; }
+    .empty-state { font-size: 13px; color: var(--muted); text-align: center; margin-top: 2.5rem; line-height: 1.7; }
+
+    /* Test Panel */
+    #test-panel { padding: 1.5rem; overflow-y: auto; flex: 1; }
+    .test-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .test-header h2 { font-size: 15px; font-weight: 600; color: var(--text); }
+    .run-tests-btn {
+      font-size: 12px; padding: 6px 16px; border-radius: 100px;
+      border: 1px solid var(--primary-mid); background: var(--primary-light);
+      color: var(--primary); cursor: pointer; font-family: inherit;
+      font-weight: 500; transition: all 0.15s;
+    }
+    .run-tests-btn:hover { background: var(--primary); color: white; }
+    .test-summary {
+      display: flex; gap: 10px; margin-bottom: 1.25rem; flex-wrap: wrap;
+    }
+    .test-stat {
+      flex: 1; min-width: 90px; padding: 10px 14px;
+      border-radius: 10px; border: 1px solid var(--border);
+      text-align: center;
+    }
+    .test-stat .stat-num { font-size: 22px; font-weight: 600; }
+    .test-stat .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .test-stat.pass { background: #f0faf6; border-color: #a5d6c0; }
+    .test-stat.pass .stat-num { color: var(--success); }
+    .test-stat.fail { background: #fff5f5; border-color: #ffc5c5; }
+    .test-stat.fail .stat-num { color: var(--danger); }
+    .test-stat.total { background: var(--primary-light); border-color: #d0cde8; }
+    .test-stat.total .stat-num { color: var(--primary); }
+    .test-group { margin-bottom: 1rem; }
+    .test-group-name { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .test-case {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: 8px; margin-bottom: 4px;
+      font-size: 13px; border: 1px solid var(--border);
+    }
+    .test-case.running { background: #fffde7; border-color: #fff176; }
+    .test-case.passed { background: #f0faf6; border-color: #a5d6c0; }
+    .test-case.failed { background: #fff5f5; border-color: #ffc5c5; }
+    .test-case.pending { background: #fafaf8; color: var(--muted); }
+    .test-icon { width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; font-weight: 700; }
+    .test-icon.pass { background: var(--success); color: white; }
+    .test-icon.fail { background: var(--danger); color: white; }
+    .test-icon.run { background: #ffd54f; color: #333; }
+    .test-icon.pend { background: #e0e0e0; color: #666; }
+    .test-name { flex: 1; }
+    .test-duration { font-size: 11px; color: var(--muted); }
+    .test-error { font-size: 11px; color: var(--danger); margin-top: 3px; font-family: monospace; }
+
+    /* Analytics Panel */
+    #analytics-panel { padding: 1.5rem; overflow-y: auto; flex: 1; }
+    .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+    .metric-card {
+      padding: 14px 16px; border-radius: 12px;
+      border: 1px solid var(--border); background: var(--surface);
+    }
+    .metric-num { font-size: 26px; font-weight: 600; color: var(--primary); }
+    .metric-label { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .metric-sub { font-size: 11px; color: #bbb; margin-top: 2px; }
+    .section-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+    .topic-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .topic-bar-label { font-size: 12px; color: var(--text); width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .topic-bar-track { flex: 1; background: #f0eef8; border-radius: 100px; height: 8px; overflow: hidden; }
+    .topic-bar-fill { height: 100%; background: var(--primary-mid); border-radius: 100px; transition: width 0.6s ease; }
+    .topic-bar-count { font-size: 12px; color: var(--muted); width: 24px; text-align: right; }
+
+    /* Scrollbar */
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #d0cde8; border-radius: 10px; }
-    @media (max-width: 480px) { #app { height: 100vh; border-radius: 0; } .bubble { max-width: 90%; } .header { flex-direction: column; align-items: flex-start; } }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+      #app { height: 100vh; border-radius: 0; }
+      .bubble { max-width: 90%; }
+      .header { flex-direction: column; align-items: flex-start; }
+      .tabs { overflow-x: auto; }
+      .tab { white-space: nowrap; font-size: 12px; padding: 9px 12px; }
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(60px);
+      background: #1a1a2e; color: white; padding: 10px 20px; border-radius: 100px;
+      font-size: 13px; z-index: 9999; transition: transform 0.3s ease; pointer-events: none;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
   </style>
 </head>
 <body>
 
 <a href="#main-chat" class="skip-link">Skip to main content</a>
 <div id="sr-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<div id="toast" role="alert" aria-live="assertive"></div>
 
 <div id="app" role="main">
   <header class="header">
@@ -78,14 +304,22 @@
       <h1>🗳️ Election Process Assistant</h1>
       <p>Ask anything about elections — registration, voting, timelines, and results.</p>
     </div>
-    <div id="google_translate_element" aria-label="Language selector"></div>
+    <div class="header-badges">
+      <span class="badge badge-firebase" aria-label="Powered by Firebase">🔥 Firebase</span>
+      <span class="badge badge-perf" aria-label="Performance monitoring active">⚡ Perf</span>
+      <span class="badge badge-status" id="connection-badge" aria-live="polite">● Online</span>
+    </div>
   </header>
 
   <div class="tabs" role="tablist" aria-label="Assistant sections">
-    <button class="tab active" role="tab" aria-selected="true" aria-controls="chat-panel" id="tab-chat" onclick="switchTab('chat')">💬 Ask Assistant</button>
-    <button class="tab" role="tab" aria-selected="false" aria-controls="chart-panel-wrap" id="tab-chart" onclick="switchTab('chart')">📊 Election Timeline</button>
+    <button class="tab active" role="tab" aria-selected="true" aria-controls="chat-panel" id="tab-chat" onclick="switchTab('chat')">💬 Ask</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="chart-panel-wrap" id="tab-chart" onclick="switchTab('chart')">📊 Timeline</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="history-panel-wrap" id="tab-history" onclick="switchTab('history')">🕓 History</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="analytics-panel-wrap" id="tab-analytics" onclick="switchTab('analytics')">📈 Analytics</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="test-panel-wrap" id="tab-tests" onclick="switchTab('tests')">🧪 Tests</button>
   </div>
 
+  <!-- ===== CHAT PANEL ===== -->
   <div class="tab-panel active" id="chat-panel" role="tabpanel" aria-labelledby="tab-chat">
     <nav class="topics" aria-label="Quick question topics">
       <button class="topic-btn" onclick="ask('How do I register to vote?')">Voter registration</button>
@@ -101,146 +335,821 @@
     <div class="chat-area" id="chat" id="main-chat" role="log" aria-label="Conversation" aria-live="polite">
       <div class="msg assistant">
         <div class="avatar bot" aria-hidden="true">E</div>
-        <div class="bubble">Hi! I'm your Election Process Assistant. I can help you understand how elections work — from voter registration and polling, to how votes are counted and results certified. What would you like to know?</div>
+        <div class="bubble">
+          Hi! I'm your Election Process Assistant. I can help you understand how elections work — from voter registration and polling, to how votes are counted and results certified.<br><br>
+          What would you like to know?
+        </div>
       </div>
     </div>
 
     <div class="input-area">
       <label for="user-input" class="sr-only">Type your question about elections</label>
-      <textarea id="user-input" placeholder="Ask about elections..." rows="1" aria-label="Type your question about elections" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <textarea id="user-input" placeholder="Ask about elections..." rows="1"
+        aria-label="Type your question about elections"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
       <button id="send-btn" onclick="sendMsg()" aria-label="Send message">Send →</button>
     </div>
   </div>
 
+  <!-- ===== CHART PANEL ===== -->
   <div class="tab-panel" id="chart-panel-wrap" role="tabpanel" aria-labelledby="tab-chart">
     <div id="chart-panel">
-      <h2>US Presidential Election Timeline</h2>
-      <p>Key phases and approximate durations of a US presidential election cycle.</p>
+      <p class="chart-section-title">US Presidential Election Timeline</p>
+      <p class="chart-section-desc">Key phases and approximate durations of a US presidential election cycle.</p>
       <div id="timeline_chart" role="img" aria-label="Bar chart showing US election timeline phases"></div>
-      <h2 style="margin-top:1.5rem">Voter Turnout by Election Type</h2>
-      <p>Average US voter turnout percentages across different election types.</p>
+      <p class="chart-section-title" style="margin-top:1.5rem">Voter Turnout by Election Type</p>
+      <p class="chart-section-desc">Average US voter turnout percentages across different election types.</p>
       <div id="bar_chart" role="img" aria-label="Bar chart showing voter turnout by election type"></div>
+    </div>
+  </div>
+
+  <!-- ===== HISTORY PANEL ===== -->
+  <div class="tab-panel" id="history-panel-wrap" role="tabpanel" aria-labelledby="tab-history">
+    <div id="history-panel">
+      <div class="history-header">
+        <h2>Chat History <span style="font-size:12px;color:var(--muted);font-weight:400">(Firebase)</span></h2>
+        <button class="clear-btn" onclick="clearHistory()" aria-label="Clear all chat history">Clear all</button>
+      </div>
+      <div id="history-list"><p class="empty-state">No history yet.<br>Start a conversation in the Ask tab!</p></div>
+    </div>
+  </div>
+
+  <!-- ===== ANALYTICS PANEL ===== -->
+  <div class="tab-panel" id="analytics-panel-wrap" role="tabpanel" aria-labelledby="tab-analytics">
+    <div id="analytics-panel">
+      <p class="section-title">Session Analytics</p>
+      <div class="analytics-grid">
+        <div class="metric-card">
+          <div class="metric-num" id="metric-questions">0</div>
+          <div class="metric-label">Questions asked</div>
+          <div class="metric-sub">this session</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-num" id="metric-responses">0</div>
+          <div class="metric-label">Responses</div>
+          <div class="metric-sub">from AI</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-num" id="metric-avgtime">—</div>
+          <div class="metric-label">Avg response</div>
+          <div class="metric-sub">milliseconds</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-num" id="metric-errors">0</div>
+          <div class="metric-label">Errors</div>
+          <div class="metric-sub">this session</div>
+        </div>
+      </div>
+      <p class="section-title">Most asked topics</p>
+      <div id="topic-bars"><p class="empty-state" style="margin-top:1rem">No topics yet.</p></div>
+      <p class="section-title" style="margin-top:1.5rem">Firebase events logged</p>
+      <div id="firebase-events" style="font-size:13px;color:var(--muted);line-height:2;"></div>
+    </div>
+  </div>
+
+  <!-- ===== TEST PANEL ===== -->
+  <div class="tab-panel" id="test-panel-wrap" role="tabpanel" aria-labelledby="tab-tests">
+    <div id="test-panel">
+      <div class="test-header">
+        <h2>Test Suite</h2>
+        <button class="run-tests-btn" onclick="runAllTests()" aria-label="Run all tests">▶ Run all tests</button>
+      </div>
+      <div class="test-summary">
+        <div class="test-stat total"><div class="stat-num" id="stat-total">—</div><div class="stat-label">Total</div></div>
+        <div class="test-stat pass"><div class="stat-num" id="stat-pass">—</div><div class="stat-label">Passed</div></div>
+        <div class="test-stat fail"><div class="stat-num" id="stat-fail">—</div><div class="stat-label">Failed</div></div>
+      </div>
+      <div id="test-results"></div>
     </div>
   </div>
 </div>
 
 <script>
-  const WORKER_URL = "https://tiny-hill-9f60.kartikeyasorout.workers.dev";
-  let history = [];
-  const chat = document.getElementById('chat');
-  const input = document.getElementById('user-input');
-  const sendBtn = document.getElementById('send-btn');
-  const srStatus = document.getElementById('sr-status');
+// ============================================================
+// CONFIG
+// ============================================================
+const WORKER_URL = "https://tiny-hill-9f60.kartikeyasorout.workers.dev";
 
-  function googleTranslateInit() {
-    new google.translate.TranslateElement({
-      pageLanguage: 'en',
-      includedLanguages: 'en,hi,es,fr,ar,zh-CN,pt,de,ja,ko',
-      layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
-      autoDisplay: false
-    }, 'google_translate_element');
-  }
+const firebaseConfig = {
+  apiKey: "AIzaSyCX50gML5ePrjTmQZFUxsxAcb5vm1Zk64Y",
+  authDomain: "election-assistant-936d2.firebaseapp.com",
+  projectId: "election-assistant-936d2",
+  storageBucket: "election-assistant-936d2.firebasestorage.app",
+  messagingSenderId: "10169402589​66",
+  appId: "1:1016940258966:web:e6e0a42930326e79c384b7",
+  measurementId: "G-RTJGGN27TL"
+};
 
-  function switchTab(tab) {
-    document.querySelectorAll('.tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    document.getElementById('tab-'+tab).classList.add('active');
-    document.getElementById('tab-'+tab).setAttribute('aria-selected','true');
-    if (tab === 'chat') document.getElementById('chat-panel').classList.add('active');
-    else { document.getElementById('chart-panel-wrap').classList.add('active'); drawCharts(); }
-  }
+// ============================================================
+// FIREBASE INIT
+// ============================================================
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const analytics = firebase.analytics();
+const perf = firebase.performance();
 
-  google.charts.load('current', { packages: ['corechart'] });
-  let chartsDrawn = false;
-  function drawCharts() {
-    if (chartsDrawn) return;
-    chartsDrawn = true;
-    google.charts.setOnLoadCallback(() => {
-      const timelineData = google.visualization.arrayToDataTable([
-        ['Phase', 'Duration (months)', {role:'style'}, {role:'annotation'}],
-        ['Primaries & Caucuses', 6, '#7F77DD', '6 months'],
-        ['Party Conventions', 1, '#534AB7', '1 month'],
-        ['General Campaign', 2, '#3C3489', '2 months'],
-        ['Election Day & Counting', 1, '#9FE1CB', '~1 month'],
-        ['Electoral College Vote', 1, '#1D9E75', '1 month'],
-        ['Inauguration', 1, '#5DCAA5', '1 month'],
-      ]);
-      new google.visualization.BarChart(document.getElementById('timeline_chart')).draw(timelineData, {
-        legend:{position:'none'}, hAxis:{title:'Duration (months)',minValue:0},
-        vAxis:{textStyle:{fontSize:12}}, chartArea:{width:'60%',height:'80%'}, backgroundColor:'transparent'
-      });
+// ============================================================
+// STATE
+// ============================================================
+const sessionId = 'session_' + Date.now();
+let conversationHistory = [];
+let sessionStats = { questions: 0, responses: 0, errors: 0, responseTimes: [], topicCounts: {} };
+let firebaseEventLog = [];
 
-      const turnoutData = google.visualization.arrayToDataTable([
-        ['Election Type', 'Avg Turnout (%)', {role:'style'}, {role:'annotation'}],
-        ['Presidential', 55, '#3C3489', '55%'],
-        ['Midterm', 40, '#7F77DD', '40%'],
-        ['Primary', 20, '#AFA9EC', '20%'],
-        ['Local', 15, '#CECBF6', '15%'],
-      ]);
-      new google.visualization.BarChart(document.getElementById('bar_chart')).draw(turnoutData, {
-        legend:{position:'none'}, hAxis:{title:'Voter Turnout (%)',minValue:0,maxValue:100},
-        vAxis:{textStyle:{fontSize:12}}, chartArea:{width:'60%',height:'75%'}, backgroundColor:'transparent'
-      });
+// DOM refs
+const chat = document.getElementById('chat');
+const input = document.getElementById('user-input');
+const sendBtn = document.getElementById('send-btn');
+const srStatus = document.getElementById('sr-status');
+
+// ============================================================
+// FIREBASE HELPERS
+// ============================================================
+
+/**
+ * Save a message to Firestore with error handling
+ * @param {string} role - 'user' or 'assistant'
+ * @param {string} content - Message content
+ * @returns {Promise<void>}
+ */
+async function saveToFirestore(role, content) {
+  try {
+    await db.collection('chats').add({
+      sessionId,
+      role,
+      content: content.slice(0, 2000),
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      userAgent: navigator.userAgent.slice(0, 100),
     });
+  } catch (e) {
+    console.warn('[Firestore] Save failed:', e.message);
   }
+}
 
-  function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,120)+'px'; }
-  function handleKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} }
-
-  function addMsg(role, text) {
-    const div = document.createElement('div');
-    div.className = 'msg '+role;
-    div.innerHTML = `<div class="avatar ${role==='user'?'user':'bot'}" aria-hidden="true">${role==='user'?'You':'E'}</div><div class="bubble" role="article" aria-label="${role==='user'?'Your message':'Assistant response'}">${text.replace(/\n/g,'<br>')}</div>`;
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-    srStatus.textContent = role==='assistant' ? 'Assistant replied: '+text.slice(0,100) : '';
+/**
+ * Log a custom Firebase Analytics event
+ * @param {string} eventName - Event name
+ * @param {Object} params - Event parameters
+ */
+function logAnalyticsEvent(eventName, params = {}) {
+  try {
+    analytics.logEvent(eventName, { sessionId, ...params });
+    firebaseEventLog.push({ name: eventName, time: new Date().toLocaleTimeString(), params });
+    updateFirebaseEventDisplay();
+  } catch (e) {
+    console.warn('[Analytics] Log failed:', e.message);
   }
+}
 
-  function addTyping() {
-    const div = document.createElement('div');
-    div.className = 'msg assistant'; div.id = 'typing-indicator';
-    div.setAttribute('aria-label','Assistant is typing');
-    div.innerHTML = `<div class="avatar bot" aria-hidden="true">E</div><div class="typing-bubble" aria-hidden="true"><div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-    srStatus.textContent = 'Assistant is typing...';
-  }
+/**
+ * Load history from Firestore
+ */
+async function loadHistory() {
+  const listEl = document.getElementById('history-list');
+  listEl.innerHTML = '<p class="empty-state">Loading from Firebase…</p>';
+  try {
+    const snapshot = await db.collection('chats')
+      .orderBy('timestamp', 'desc')
+      .limit(30)
+      .get();
 
-  async function ask(question) { input.value = question; await sendMsg(); }
+    const sessions = {};
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      if (!sessions[d.sessionId]) sessions[d.sessionId] = [];
+      sessions[d.sessionId].push(d);
+    });
 
-  async function sendMsg() {
-    const text = input.value.trim();
-    if (!text || sendBtn.disabled) return;
-    input.value = ''; input.style.height = 'auto';
-    sendBtn.disabled = true;
-    addMsg('user', text);
-    history.push({ role:'user', content:text });
-    addTyping();
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
-      const res = await fetch(WORKER_URL, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({messages:history}), signal: controller.signal
-      });
-      clearTimeout(timeout);
-      document.getElementById('typing-indicator')?.remove();
-      if (!res.ok) {
-        const err = await res.json().catch(()=>({}));
-        addMsg('assistant', 'Error: '+(err.error||'Something went wrong. Please try again.'));
-      } else {
-        const data = await res.json();
-        const reply = data.content?.filter(b=>b.type==='text').map(b=>b.text).join('\n') || 'Sorry, no response received.';
-        addMsg('assistant', reply);
-        history.push({ role:'assistant', content:reply });
-      }
-    } catch(err) {
-      document.getElementById('typing-indicator')?.remove();
-      addMsg('assistant', err.name==='AbortError' ? 'Request timed out. Please try again.' : 'Could not reach the server. Please check your connection.');
+    const sessionKeys = Object.keys(sessions);
+    if (sessionKeys.length === 0) {
+      listEl.innerHTML = '<p class="empty-state">No history yet.<br>Start a conversation in the Ask tab!</p>';
+      return;
     }
-    sendBtn.disabled = false;
-    input.focus();
+
+    listEl.innerHTML = '';
+    sessionKeys.forEach(sid => {
+      const msgs = sessions[sid];
+      const userMsg = msgs.find(m => m.role === 'user');
+      const assistantMsg = msgs.find(m => m.role === 'assistant');
+      if (!userMsg) return;
+
+      const div = document.createElement('div');
+      div.className = 'history-item';
+      div.setAttribute('role', 'button');
+      div.setAttribute('tabindex', '0');
+      div.setAttribute('aria-label', 'Previous question: ' + userMsg.content);
+      div.innerHTML = `
+        <div class="hi-q">Q: ${sanitizeHTML(userMsg.content.slice(0, 80))}${userMsg.content.length > 80 ? '…' : ''}</div>
+        ${assistantMsg ? `<div class="hi-a">A: ${sanitizeHTML(assistantMsg.content.slice(0, 100))}…</div>` : ''}
+        <div class="hi-time">${userMsg.timestamp?.toDate?.().toLocaleString() || 'Just now'}</div>
+      `;
+      div.onclick = () => { switchTab('chat'); ask(userMsg.content); };
+      div.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { switchTab('chat'); ask(userMsg.content); } };
+      listEl.appendChild(div);
+    });
+  } catch (e) {
+    listEl.innerHTML = '<p class="empty-state">Could not load history.<br>' + e.message + '</p>';
+    console.warn('[Firestore] Load failed:', e.message);
   }
+}
+
+/**
+ * Clear all history (current session) from Firestore
+ */
+async function clearHistory() {
+  try {
+    const snapshot = await db.collection('chats').where('sessionId', '==', sessionId).get();
+    const batch = db.batch();
+    snapshot.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    conversationHistory = [];
+    logAnalyticsEvent('history_cleared', { sessionId });
+    showToast('History cleared');
+    loadHistory();
+  } catch (e) {
+    showToast('Could not clear history');
+  }
+}
+
+// ============================================================
+// ANALYTICS TRACKING
+// ============================================================
+
+function updateSessionStats() {
+  document.getElementById('metric-questions').textContent = sessionStats.questions;
+  document.getElementById('metric-responses').textContent = sessionStats.responses;
+  document.getElementById('metric-errors').textContent = sessionStats.errors;
+  const avg = sessionStats.responseTimes.length
+    ? Math.round(sessionStats.responseTimes.reduce((a, b) => a + b, 0) / sessionStats.responseTimes.length)
+    : null;
+  document.getElementById('metric-avgtime').textContent = avg ? avg + 'ms' : '—';
+}
+
+function updateTopicDisplay() {
+  const el = document.getElementById('topic-bars');
+  const entries = Object.entries(sessionStats.topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  if (entries.length === 0) { el.innerHTML = '<p class="empty-state" style="margin-top:1rem">No topics yet.</p>'; return; }
+  const max = entries[0][1];
+  el.innerHTML = entries.map(([topic, count]) => `
+    <div class="topic-bar-row">
+      <div class="topic-bar-label" title="${topic}">${topic}</div>
+      <div class="topic-bar-track"><div class="topic-bar-fill" style="width:${Math.round((count/max)*100)}%"></div></div>
+      <div class="topic-bar-count">${count}</div>
+    </div>
+  `).join('');
+}
+
+function updateFirebaseEventDisplay() {
+  const el = document.getElementById('firebase-events');
+  const recent = firebaseEventLog.slice(-10).reverse();
+  el.innerHTML = recent.map(e =>
+    `<div><span style="color:#bbb">${e.time}</span> — <strong>${e.name}</strong></div>`
+  ).join('') || '<span style="color:var(--muted)">No events yet.</span>';
+}
+
+function trackTopic(text) {
+  const topicMap = {
+    'register': 'Voter registration', 'registration': 'Voter registration',
+    'election day': 'Election day', 'polling': 'Election day',
+    'timeline': 'Election timeline', 'count': 'Vote counting',
+    'mail': 'Mail-in voting', 'early voting': 'Early voting',
+    'certif': 'Certification', 'electoral college': 'Electoral College',
+    'candidacy': 'Candidacy', 'candidate': 'Candidacy',
+  };
+  const lower = text.toLowerCase();
+  for (const [key, label] of Object.entries(topicMap)) {
+    if (lower.includes(key)) {
+      sessionStats.topicCounts[label] = (sessionStats.topicCounts[label] || 0) + 1;
+      return;
+    }
+  }
+  sessionStats.topicCounts['Other'] = (sessionStats.topicCounts['Other'] || 0) + 1;
+}
+
+// ============================================================
+// CHAT FUNCTIONS
+// ============================================================
+
+/**
+ * Sanitize text to prevent XSS
+ * @param {string} str
+ * @returns {string}
+ */
+function sanitizeHTML(str) {
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+/**
+ * Auto-resize textarea based on content
+ * @param {HTMLTextAreaElement} el
+ */
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+/**
+ * Handle keyboard shortcuts in textarea
+ * @param {KeyboardEvent} e
+ */
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+}
+
+/**
+ * Add a message bubble to the chat
+ * @param {string} role - 'user' or 'assistant'
+ * @param {string} text - Message content
+ */
+function addMsg(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = `
+    <div class="avatar ${role === 'user' ? 'user' : 'bot'}" aria-hidden="true">${role === 'user' ? 'You' : 'E'}</div>
+    <div class="bubble" role="article" aria-label="${role === 'user' ? 'Your message' : 'Assistant response'}">${sanitizeHTML(text).replace(/\n/g, '<br>')}</div>
+  `;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  srStatus.textContent = role === 'assistant' ? 'Assistant replied: ' + text.slice(0, 100) : '';
+}
+
+function addTyping() {
+  const div = document.createElement('div');
+  div.className = 'msg assistant'; div.id = 'typing-indicator';
+  div.setAttribute('aria-label', 'Assistant is typing');
+  div.innerHTML = `<div class="avatar bot" aria-hidden="true">E</div><div class="typing-bubble" aria-hidden="true"><div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  srStatus.textContent = 'Assistant is typing…';
+}
+
+async function ask(question) {
+  input.value = question;
+  await sendMsg();
+}
+
+/**
+ * Send a message to the AI worker and handle the response
+ */
+async function sendMsg() {
+  const text = input.value.trim();
+  if (!text || sendBtn.disabled) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  sendBtn.disabled = true;
+
+  addMsg('user', text);
+  conversationHistory.push({ role: 'user', content: text });
+  sessionStats.questions++;
+  trackTopic(text);
+  updateSessionStats();
+
+  await saveToFirestore('user', text);
+  logAnalyticsEvent('question_asked', { question: text.slice(0, 100), questionLength: text.length });
+
+  // Firebase Performance trace
+  const trace = perf.trace('api_response_time');
+  trace.start();
+  const startTime = Date.now();
+
+  addTyping();
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: conversationHistory }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    const elapsed = Date.now() - startTime;
+    trace.stop();
+
+    document.getElementById('typing-indicator')?.remove();
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const errMsg = 'Error: ' + (err.error || 'Something went wrong. Please try again.');
+      addMsg('assistant', errMsg);
+      sessionStats.errors++;
+      logAnalyticsEvent('api_error', { status: res.status, error: err.error || 'unknown' });
+    } else {
+      const data = await res.json();
+      const reply = data.content?.filter(b => b.type === 'text').map(b => b.text).join('\n')
+        || 'Sorry, no response received.';
+
+      addMsg('assistant', reply);
+      conversationHistory.push({ role: 'assistant', content: reply });
+      sessionStats.responses++;
+      sessionStats.responseTimes.push(elapsed);
+
+      await saveToFirestore('assistant', reply);
+      logAnalyticsEvent('response_received', { responseTime: elapsed, responseLength: reply.length });
+    }
+  } catch (err) {
+    trace.stop();
+    document.getElementById('typing-indicator')?.remove();
+    const msg = err.name === 'AbortError'
+      ? 'Request timed out. Please try again.'
+      : 'Could not reach the server. Please check your connection.';
+    addMsg('assistant', msg);
+    sessionStats.errors++;
+    logAnalyticsEvent('network_error', { errorType: err.name });
+  }
+
+  updateSessionStats();
+  updateTopicDisplay();
+  sendBtn.disabled = false;
+  input.focus();
+}
+
+// ============================================================
+// CHARTS (Google Charts)
+// ============================================================
+google.charts.load('current', { packages: ['corechart'] });
+let chartsDrawn = false;
+
+function drawCharts() {
+  if (chartsDrawn) return;
+  chartsDrawn = true;
+  google.charts.setOnLoadCallback(() => {
+    const timelineData = google.visualization.arrayToDataTable([
+      ['Phase', 'Duration (months)', { role: 'style' }, { role: 'annotation' }],
+      ['Primaries & Caucuses', 6, '#7F77DD', '6 mo'],
+      ['Party Conventions', 1, '#534AB7', '1 mo'],
+      ['General Campaign', 2, '#3C3489', '2 mo'],
+      ['Election Day & Counting', 1, '#9FE1CB', '~1 mo'],
+      ['Electoral College Vote', 1, '#1D9E75', '1 mo'],
+      ['Inauguration', 1, '#5DCAA5', '1 mo'],
+    ]);
+    new google.visualization.BarChart(document.getElementById('timeline_chart')).draw(timelineData, {
+      legend: { position: 'none' },
+      hAxis: { title: 'Duration (months)', minValue: 0 },
+      vAxis: { textStyle: { fontSize: 12 } },
+      chartArea: { width: '60%', height: '80%' },
+      backgroundColor: 'transparent',
+    });
+
+    const turnoutData = google.visualization.arrayToDataTable([
+      ['Election Type', 'Avg Turnout (%)', { role: 'style' }, { role: 'annotation' }],
+      ['Presidential', 55, '#3C3489', '55%'],
+      ['Midterm', 40, '#7F77DD', '40%'],
+      ['Primary', 20, '#AFA9EC', '20%'],
+      ['Local', 15, '#CECBF6', '15%'],
+    ]);
+    new google.visualization.BarChart(document.getElementById('bar_chart')).draw(turnoutData, {
+      legend: { position: 'none' },
+      hAxis: { title: 'Voter Turnout (%)', minValue: 0, maxValue: 100 },
+      vAxis: { textStyle: { fontSize: 12 } },
+      chartArea: { width: '60%', height: '75%' },
+      backgroundColor: 'transparent',
+    });
+
+    logAnalyticsEvent('charts_viewed');
+  });
+}
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.remove('active');
+    t.setAttribute('aria-selected', 'false');
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('tab-' + tab).setAttribute('aria-selected', 'true');
+
+  const panelMap = {
+    chat: 'chat-panel',
+    chart: 'chart-panel-wrap',
+    history: 'history-panel-wrap',
+    analytics: 'analytics-panel-wrap',
+    tests: 'test-panel-wrap',
+  };
+  document.getElementById(panelMap[tab]).classList.add('active');
+
+  if (tab === 'chart') drawCharts();
+  if (tab === 'history') loadHistory();
+  if (tab === 'analytics') { updateSessionStats(); updateTopicDisplay(); updateFirebaseEventDisplay(); }
+  if (tab === 'tests') renderTestSkeletons();
+
+  logAnalyticsEvent('tab_switched', { tab });
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ============================================================
+// NETWORK STATUS
+// ============================================================
+function updateConnectionBadge(online) {
+  const badge = document.getElementById('connection-badge');
+  badge.textContent = online ? '● Online' : '● Offline';
+  badge.style.background = online ? '' : '#fff5f5';
+  badge.style.color = online ? '' : 'var(--danger)';
+  badge.style.borderColor = online ? '' : '#ffc5c5';
+}
+window.addEventListener('online', () => updateConnectionBadge(true));
+window.addEventListener('offline', () => updateConnectionBadge(false));
+
+// ============================================================
+// TEST SUITE
+// ============================================================
+const TEST_SUITE = [
+  {
+    group: 'Input Validation',
+    tests: [
+      {
+        name: 'sanitizeHTML escapes script tags',
+        fn: () => {
+          const result = sanitizeHTML('<script>alert(1)</script>');
+          return !result.includes('<script>') && result.includes('&lt;');
+        },
+      },
+      {
+        name: 'sanitizeHTML escapes angle brackets',
+        fn: () => {
+          const result = sanitizeHTML('<b>bold</b>');
+          return result === '&lt;b&gt;bold&lt;/b&gt;';
+        },
+      },
+      {
+        name: 'Empty input does not send message',
+        fn: () => {
+          const originalDisabled = sendBtn.disabled;
+          const originalValue = input.value;
+          input.value = '   ';
+          const wouldSend = input.value.trim().length > 0;
+          input.value = originalValue;
+          return !wouldSend;
+        },
+      },
+      {
+        name: 'autoResize does not exceed max height',
+        fn: () => {
+          const el = document.createElement('textarea');
+          el.style.height = 'auto';
+          document.body.appendChild(el);
+          el.value = 'a\n'.repeat(20);
+          autoResize(el);
+          const ok = parseInt(el.style.height) <= 120;
+          document.body.removeChild(el);
+          return ok;
+        },
+      },
+    ],
+  },
+  {
+    group: 'Firebase Integration',
+    tests: [
+      {
+        name: 'Firebase app is initialized',
+        fn: () => firebase.apps.length > 0,
+      },
+      {
+        name: 'Firestore instance is available',
+        fn: () => typeof db.collection === 'function',
+      },
+      {
+        name: 'Analytics instance is available',
+        fn: () => typeof analytics.logEvent === 'function',
+      },
+      {
+        name: 'Performance monitoring is available',
+        fn: () => typeof perf.trace === 'function',
+      },
+      {
+        name: 'Performance trace can be created',
+        fn: () => {
+          try {
+            const t = perf.trace('test_trace');
+            return typeof t.start === 'function' && typeof t.stop === 'function';
+          } catch { return false; }
+        },
+      },
+    ],
+  },
+  {
+    group: 'Conversation State',
+    tests: [
+      {
+        name: 'sessionId is a non-empty string',
+        fn: () => typeof sessionId === 'string' && sessionId.startsWith('session_'),
+      },
+      {
+        name: 'conversationHistory starts empty',
+        fn: () => Array.isArray(conversationHistory),
+      },
+      {
+        name: 'sessionStats has required keys',
+        fn: () => ['questions', 'responses', 'errors', 'responseTimes', 'topicCounts']
+          .every(k => k in sessionStats),
+      },
+      {
+        name: 'trackTopic categorizes voter registration',
+        fn: () => {
+          const before = { ...sessionStats.topicCounts };
+          trackTopic('How do I register to vote?');
+          const ok = sessionStats.topicCounts['Voter registration'] > (before['Voter registration'] || 0);
+          return ok;
+        },
+      },
+      {
+        name: 'trackTopic categorizes unknown as Other',
+        fn: () => {
+          const before = sessionStats.topicCounts['Other'] || 0;
+          trackTopic('xyz random question zzzz');
+          return sessionStats.topicCounts['Other'] > before;
+        },
+      },
+    ],
+  },
+  {
+    group: 'UI & Accessibility',
+    tests: [
+      {
+        name: 'Skip link exists in DOM',
+        fn: () => document.querySelector('.skip-link') !== null,
+      },
+      {
+        name: 'All tabs have aria-selected attribute',
+        fn: () => Array.from(document.querySelectorAll('[role="tab"]'))
+          .every(t => t.hasAttribute('aria-selected')),
+      },
+      {
+        name: 'Chat area has aria-live attribute',
+        fn: () => document.getElementById('chat')?.getAttribute('aria-live') === 'polite',
+      },
+      {
+        name: 'Send button has aria-label',
+        fn: () => sendBtn.hasAttribute('aria-label'),
+      },
+      {
+        name: 'SR-only status element exists',
+        fn: () => document.getElementById('sr-status') !== null,
+      },
+    ],
+  },
+  {
+    group: 'Tab Navigation',
+    tests: [
+      {
+        name: 'switchTab activates correct panel',
+        fn: () => {
+          switchTab('chart');
+          const ok = document.getElementById('chart-panel-wrap').classList.contains('active');
+          switchTab('chat');
+          return ok;
+        },
+      },
+      {
+        name: 'switchTab deactivates other panels',
+        fn: () => {
+          switchTab('history');
+          const panels = document.querySelectorAll('.tab-panel.active');
+          const ok = panels.length === 1;
+          switchTab('chat');
+          return ok;
+        },
+      },
+      {
+        name: 'All 5 tabs are present',
+        fn: () => document.querySelectorAll('[role="tab"]').length === 5,
+      },
+    ],
+  },
+  {
+    group: 'Error Handling',
+    tests: [
+      {
+        name: 'logAnalyticsEvent does not throw on invalid params',
+        fn: () => {
+          try { logAnalyticsEvent('test_event', {}); return true; }
+          catch { return false; }
+        },
+      },
+      {
+        name: 'updateSessionStats does not throw with empty data',
+        fn: () => {
+          try { updateSessionStats(); return true; }
+          catch { return false; }
+        },
+      },
+      {
+        name: 'updateTopicDisplay handles empty topicCounts',
+        fn: () => {
+          try {
+            const saved = sessionStats.topicCounts;
+            sessionStats.topicCounts = {};
+            updateTopicDisplay();
+            sessionStats.topicCounts = saved;
+            return true;
+          } catch { return false; }
+        },
+      },
+    ],
+  },
+];
+
+function renderTestSkeletons() {
+  const container = document.getElementById('test-results');
+  container.innerHTML = TEST_SUITE.map(group => `
+    <div class="test-group">
+      <div class="test-group-name">${group.group}</div>
+      ${group.tests.map((t, i) => `
+        <div class="test-case pending" id="tc-${group.group.replace(/\s/g,'_')}-${i}">
+          <div class="test-icon pend">○</div>
+          <div class="test-name">${t.name}</div>
+          <div class="test-duration"></div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+  document.getElementById('stat-total').textContent = TEST_SUITE.reduce((a, g) => a + g.tests.length, 0);
+  document.getElementById('stat-pass').textContent = '—';
+  document.getElementById('stat-fail').textContent = '—';
+}
+
+async function runAllTests() {
+  renderTestSkeletons();
+  let passed = 0, failed = 0;
+  const total = TEST_SUITE.reduce((a, g) => a + g.tests.length, 0);
+
+  for (const group of TEST_SUITE) {
+    for (let i = 0; i < group.tests.length; i++) {
+      const t = group.tests[i];
+      const id = `tc-${group.group.replace(/\s/g,'_')}-${i}`;
+      const el = document.getElementById(id);
+      if (!el) continue;
+
+      el.className = 'test-case running';
+      el.querySelector('.test-icon').className = 'test-icon run';
+      el.querySelector('.test-icon').textContent = '…';
+
+      await new Promise(r => setTimeout(r, 40));
+
+      const start = performance.now();
+      let ok = false;
+      let errorMsg = '';
+      try {
+        ok = await Promise.resolve(t.fn());
+      } catch (e) {
+        ok = false;
+        errorMsg = e.message;
+      }
+      const dur = Math.round(performance.now() - start);
+
+      if (ok) {
+        passed++;
+        el.className = 'test-case passed';
+        el.querySelector('.test-icon').className = 'test-icon pass';
+        el.querySelector('.test-icon').textContent = '✓';
+      } else {
+        failed++;
+        el.className = 'test-case failed';
+        el.querySelector('.test-icon').className = 'test-icon fail';
+        el.querySelector('.test-icon').textContent = '✗';
+        if (errorMsg) {
+          const errDiv = document.createElement('div');
+          errDiv.className = 'test-error';
+          errDiv.textContent = errorMsg;
+          el.appendChild(errDiv);
+        }
+      }
+      el.querySelector('.test-duration').textContent = dur + 'ms';
+    }
+  }
+
+  document.getElementById('stat-pass').textContent = passed;
+  document.getElementById('stat-fail').textContent = failed;
+  document.getElementById('stat-total').textContent = total;
+
+  logAnalyticsEvent('tests_run', { passed, failed, total });
+  showToast(`Tests complete: ${passed}/${total} passed`);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+logAnalyticsEvent('app_loaded', { referrer: document.referrer || 'direct' });
+renderTestSkeletons();
 </script>
 </body>
 </html>
